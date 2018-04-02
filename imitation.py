@@ -120,7 +120,6 @@ class Imitation():
                 train_rewards = np.concatenate((train_rewards, rewards), axis=0) 
         
         print("Train data has been generated using the expert policy")
-        pdb.set_trace()
 
         #Train the model using data from the expert
         self.model.fit(train_states, train_actions, epochs=num_epochs, batch_size=args.batch_size)
