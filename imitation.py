@@ -108,6 +108,8 @@ class Imitation():
 
         args = self.args
         #Construct the training dataset
+        print("Generating training data by running expert policy")
+
         for i in range(num_episodes):
             states, actions, rewards = self.run_expert(env)
             if i == 0:
@@ -166,7 +168,7 @@ def parse_arguments():
     '''
     parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                     help='learning rate')
-    parser.add_argument('--episodes', type=int, default=10, metavar='N',
+    parser.add_argument('--episodes', type=int, default=100, metavar='N',
                     help='Number of episodes to generate from expert')
     parser.add_argument('--batch_size', type=int, default=32, metavar='N',
                     help='Batch Size')
