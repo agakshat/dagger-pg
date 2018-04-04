@@ -17,10 +17,10 @@ class ActorNetwork(nn.Module):
     self.action.bias.data.fill_(0)
 
     gain = nn.init.calculate_gain('relu')
-    nn.init.xavier_uniform(self.fc1.weight)
-    nn.init.xavier_uniform(self.fc2.weight)
-    nn.init.xavier_uniform(self.fc3.weight)
-    nn.init.xavier_uniform(self.action.weight)
+    nn.init.xavier_uniform(self.fc1.weight,gain=gain)
+    nn.init.xavier_uniform(self.fc2.weight,gain=gain)
+    nn.init.xavier_uniform(self.fc3.weight,gain=gain)
+    nn.init.xavier_uniform(self.action.weight,gain=gain)
 
   def _fwd(self,obs):
     x = F.relu(self.fc1(obs))
@@ -34,4 +34,4 @@ class ActorNetwork(nn.Module):
     probs = F.softmax(x,dim=-1)
     #log_probs = F.log_softmax(x)
     #action = probs.max(1,keepdim=True)[1]
-    return None,probs
+    return probs

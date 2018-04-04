@@ -55,36 +55,35 @@ def main(args):
         actor.cuda()
     optimizer = optim.Adam(actor.parameters(),lr=args.lr)
     
-    eps = 0.5
+    eps = 1.0
     total_num_updates = 0
     for ep in range(args.num_episodes):
         done = False
         obs =  env.reset()
-        if eps>0.05: # linearly decaying greedy parameter epsilon
-            eps = -0.0009*ep + 0.5
+        if eps>0.1: # linearly decaying greedy parameter epsilon
+            eps = 1.0 - 0.0009*ep
 
         obsarr = []
         rewardarr = []
-        donearr = []
         actionarr = []
         logprobarr = []
 
         while not done:
             obs_var = Variable(torch.from_numpy(obs).float())
-            _,action_probs = actor.get_action(obs_var)
-            if np.random.random()<eps:
-                action = env.action_space.sample()
-            else:
-                _,action = torch.max(action_probs,-1)
-                action = action.data[0]
-
+            action_probs = actor.get_action(obs_var)
+            #if np.random.random()<eps:
+            #    action = env.action_space.sample()
+            #else:
+            #    _,action = torch.max(action_probs,-1)
+            #    action = action.data[0]
+            action = action_probs.multinomial().data[0]
+            
             log_prob = action_probs.log()[action]
-            next_obs,reward,done,info = env.step(action)
+            next_obs,reward,done,_ = env.step(action)
             if args.render:
                 env.render()
             obsarr.append(obs)
             rewardarr.append(reward)
-            donearr.append(done)
             actionarr.append(action)
             logprobarr.append(log_prob)
             obs = next_obs
@@ -96,14 +95,18 @@ def main(args):
             G[t] = args.gamma*G[t+1] + rewardarr[t]
         Gtensor = Variable(torch.FloatTensor(G))
         logprobvar = torch.cat(logprobarr)
-        loss = (0.01*Gtensor*logprobvar).mean()
+        loss = -(0.01*Gtensor*logprobvar).mean()
 
         optimizer.zero_grad()
         loss.backward()
+        #pdb.set_trace()
         torch.nn.utils.clip_grad_norm(actor.parameters(),3)
         optimizer.step()
 
         print("Episode: {} | Reward: {:.3f}| Epsilon: {:.3f}".format(ep,np.array(rewardarr).mean(),eps))
+
+        if ep%500==0:
+            torch.save(actor.state_dict(),args.save_dir+args.env_name+'_'+str(ep)+'.pt')
 
 
 
