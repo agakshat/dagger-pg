@@ -34,4 +34,12 @@ class ActorNetwork(nn.Module):
     probs = F.softmax(x,dim=-1)
     #log_probs = F.log_softmax(x)
     #action = probs.max(1,keepdim=True)[1]
-    return probs
+    action = probs.multinomial()
+    return action
+
+  def evaluate_actions(self,obs,action):
+    x = self._fwd(obs)
+    x = self.action(x)
+    log_probs = F.log_softmax(x,dim=-1)
+    action_log_probs = log_probs.gather(1,action.unsqueeze(1))
+    return action_log_probs

@@ -37,7 +37,8 @@ def parse_arguments():
                         help='disables CUDA training')
     parser.add_argument('--render', action='store_true', default=False,
                         help='render environment')
-
+    parser.add_argument('--update-freq', type=int, default=1,
+                        help='how frequently to update network (default: 1)')
     return parser.parse_args()
 
 
@@ -57,37 +58,33 @@ def main(args):
     optimizer = optim.Adam(actor.parameters(),lr=args.lr)
     
     eps = 1.0
-    
+    obsarr = []
+    rewardarr = []
+    lossarr = []
+    actionarr = []
+    ep_len = 0
     for ep in range(args.num_episodes):
         done = False
         obs =  env.reset()
         if eps>0.1: # linearly decaying greedy parameter epsilon
             eps = 1.0 - 0.0009*ep
-        ep_len = 0
-        obsarr = []
-        rewardarr = []
-        actionarr = []
-        logprobarr = []
-
+        
         while not done:
             ep_len += 1
-            obs_var = Variable(torch.from_numpy(obs).float())
-            action_probs = actor.get_action(obs_var)
+            obs_var = Variable(torch.from_numpy(obs).float(),volatile=True)
+            action = actor.get_action(obs_var)
             #if np.random.random()<eps:
             #    action = env.action_space.sample()
             #else:
             #    _,action = torch.max(action_probs,-1)
             #    action = action.data[0]
-            action = action_probs.multinomial().data[0]
-
-            log_prob = action_probs.log()[action]
+            action = action.data[0]
             next_obs,reward,done,_ = env.step(action)
             if args.render:
                 env.render()
             obsarr.append(obs)
-            rewardarr.append(reward)
             actionarr.append(action)
-            logprobarr.append(log_prob)
+            rewardarr.append(reward)
             obs = next_obs
 
         T = len(obsarr)
@@ -96,20 +93,33 @@ def main(args):
         for t in reversed(range(T-1)):
             G[t] = args.gamma*G[t+1] + rewardarr[t]
         Gtensor = Variable(torch.FloatTensor(G))
-        logprobvar = torch.cat(logprobarr)
-        loss = -(0.01*Gtensor*logprobvar).mean()
 
-        optimizer.zero_grad()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm(actor.parameters(),3)
-        optimizer.step()
-        r  =  np.array(rewardarr).sum()
-        print("Episode: {} | Reward: {:.3f}| Length: {}".format(ep,r,ep_len))
+        batch_obs = Variable(torch.from_numpy(np.stack(obsarr)).float())
+        batch_act = Variable(torch.from_numpy(np.array(actionarr)))
+        logprobvar = actor.evaluate_actions(batch_obs,batch_act).squeeze(1)
+
+        loss = -(0.01*Gtensor*logprobvar).mean()
+        lossarr.append(loss)
+
+        if ep%args.update_freq==0:
+            optimizer.zero_grad()
+            l = torch.cat(lossarr).mean()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm(actor.parameters(),3)
+            optimizer.step()
+            r  =  np.array(rewardarr).sum()/args.update_freq
+            print("Episode: {} | Reward: {:.3f}| Length: {}".format(ep,r,ep_len/args.update_freq))
+            obsarr = []
+            rewardarr = []
+            lossarr = []
+            actionarr = []
+            ep_len = 0
+
 
         if ep%500==0:
             torch.save(actor.state_dict(),args.save_dir+args.env_name+'_'+str(ep)+'.pt')
             rm,rs,em = test(env,actor,False)
-            pdb.set_trace()
+            #pdb.set_trace()
             writer.add_scalar('test/reward_mean',rm,ep)
             writer.add_scalar('test/reward_std',rs,ep)
             writer.add_scalar('test/ep_len_mean',em,ep)
@@ -128,13 +138,13 @@ def test(env,actor,render):
         while not done:
             ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float())
-            action_probs = actor.get_action(obs_var)
+            action = actor.get_action(obs_var)
             #if np.random.random()<eps:
             #    action = env.action_space.sample()
             #else:
             #    _,action = torch.max(action_probs,-1)
             #    action = action.data[0]
-            action = action_probs.multinomial().data[0]
+            action = action.data[0]
             next_obs,reward,done,_ = env.step(action)
             if render:
                 env.render()
