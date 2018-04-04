@@ -23,7 +23,7 @@ class ActorNetwork(nn.Module):
     nn.init.xavier_uniform(self.action.weight,gain=gain)
 
   def _fwd(self,obs):
-    x = F.relu(self.fc1(obs))
+    x = F.relu(self.fc1(obs/200.0))
     x = F.relu(self.fc2(x))
     x = F.relu(self.fc3(x))
     return x

@@ -11,6 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from networks import ActorNetwork
 import pdb
+from tensorboardX import SummaryWriter
 
 def parse_arguments():
     # Command-line flags are defined here.
@@ -49,26 +50,27 @@ def main(args):
     torch.manual_seed(args.seed)
     if args.cuda:
         torch.cuda.manual_seed_all(args.seed)
-
+    writer = SummaryWriter(log_dir=args.save_dir)
     actor = ActorNetwork(env.observation_space.shape[0],env.action_space.n)
     if args.cuda:
         actor.cuda()
     optimizer = optim.Adam(actor.parameters(),lr=args.lr)
     
     eps = 1.0
-    total_num_updates = 0
+    
     for ep in range(args.num_episodes):
         done = False
         obs =  env.reset()
         if eps>0.1: # linearly decaying greedy parameter epsilon
             eps = 1.0 - 0.0009*ep
-
+        ep_len = 0
         obsarr = []
         rewardarr = []
         actionarr = []
         logprobarr = []
 
         while not done:
+            ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float())
             action_probs = actor.get_action(obs_var)
             #if np.random.random()<eps:
@@ -77,7 +79,7 @@ def main(args):
             #    _,action = torch.max(action_probs,-1)
             #    action = action.data[0]
             action = action_probs.multinomial().data[0]
-            
+
             log_prob = action_probs.log()[action]
             next_obs,reward,done,_ = env.step(action)
             if args.render:
@@ -99,16 +101,52 @@ def main(args):
 
         optimizer.zero_grad()
         loss.backward()
-        #pdb.set_trace()
         torch.nn.utils.clip_grad_norm(actor.parameters(),3)
         optimizer.step()
-
-        print("Episode: {} | Reward: {:.3f}| Epsilon: {:.3f}".format(ep,np.array(rewardarr).mean(),eps))
+        r  =  np.array(rewardarr).sum()
+        print("Episode: {} | Reward: {:.3f}| Length: {}".format(ep,r,ep_len))
 
         if ep%500==0:
             torch.save(actor.state_dict(),args.save_dir+args.env_name+'_'+str(ep)+'.pt')
+            rm,rs,em = test(env,actor,False)
+            pdb.set_trace()
+            writer.add_scalar('test/reward_mean',rm,ep)
+            writer.add_scalar('test/reward_std',rs,ep)
+            writer.add_scalar('test/ep_len_mean',em,ep)
+            writer.export_scalars_to_json(args.save_dir+args.env_name+'_scalars.json')
 
+        writer.add_scalar('train/reward',r,ep)
 
+def test(env,actor,render):
+    rew_arr = []
+    ep_len_arr = []
+    for ep in range(100):
+        ep_len = 0
+        obs = env.reset()
+        ep_reward = 0
+        done = False
+        while not done:
+            ep_len += 1
+            obs_var = Variable(torch.from_numpy(obs).float())
+            action_probs = actor.get_action(obs_var)
+            #if np.random.random()<eps:
+            #    action = env.action_space.sample()
+            #else:
+            #    _,action = torch.max(action_probs,-1)
+            #    action = action.data[0]
+            action = action_probs.multinomial().data[0]
+            next_obs,reward,done,_ = env.step(action)
+            if render:
+                env.render()
+            ep_reward += reward
+            obs = next_obs
+        ep_len_arr.append(ep_len)
+        rew_arr.append(ep_reward)
+
+    print("Reward Mean: {:.3f}, Std: {:.3f}| Length: {:.3f}".format(
+            np.array(rew_arr).mean(),np.array(rew_arr).std(),
+            np.array(ep_len_arr).mean()))
+    return np.array(rew_arr).mean(),np.array(rew_arr).std(),np.array(ep_len_arr).mean()
 
 if __name__ == '__main__':
     main(sys.argv)
