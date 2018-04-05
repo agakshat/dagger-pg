@@ -45,6 +45,8 @@ def parse_arguments():
                         help='path to trained model file, if available')
     parser.add_argument('--nstep', type=int, default=5,
                         help='a2c steps')
+    parser.add_argument('--value-loss-coeff', type=float, default=0.5,
+                        help='value loss coefficient')
     return parser.parse_args()
 
 
@@ -68,7 +70,7 @@ def main(args):
     if args.cuda:
         actor.cuda()
     optimizer = optim.Adam(actor.parameters(),lr=args.lr)
-    
+    N = args.nstep
     eps = 1.0
     obsarr = []
     rewardarr = []
@@ -103,17 +105,29 @@ def main(args):
 
         T = len(obsarr)
         G = [0]*T
-        G[T-1] = rewardarr[T-1]
-        pdb.set_trace()
-        for t in reversed(range(T-1)):
-            G[t] = args.gamma*G[t+1] + rewardarr[t]
-        Gtensor = Variable(torch.FloatTensor(G))
 
         batch_obs = Variable(torch.from_numpy(np.stack(obsarr)).float())
         batch_act = Variable(torch.from_numpy(np.array(actionarr)))
-        logprobvar = actor.evaluate_actions(batch_obs,batch_act).squeeze(1)
+        valvar,logprobvar = actor.evaluate_actions(batch_obs,batch_act)
+        logprobvar = logprobvar.squeeze(1)
+        valvar = valvar.squeeze(1)
 
-        loss = -(0.01*Gtensor*logprobvar).mean()
+        for t in reversed(range(T)):
+            V = 0
+            if t+N<T:
+                V = valvar[t+N].data[0]
+            G[t] = pow(args.gamma,N)*V
+            u = min(N,T-t)
+            for k in range(u):
+                G[t] += pow(args.gamma,k)*rewardarr[t+k]
+
+        Gtensor = Variable(torch.FloatTensor(G))
+
+        adv = 0.01*Gtensor - valvar
+        action_loss = -(adv*logprobvar).mean()
+        value_loss = -adv.pow(2).mean()
+        loss = action_loss + args.value_loss_coeff*value_loss
+        #pdb.set_trace() 
         lossarr.append(loss)
 
         if ep%args.update_freq==0:
@@ -152,7 +166,7 @@ def test(env,actor,render):
         while not done:
             ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float())
-            action = actor.get_action(obs_var)
+            _,action = actor.get_action(obs_var)
             #if np.random.random()<eps:
             #    action = env.action_space.sample()
             #else:
