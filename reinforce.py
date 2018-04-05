@@ -22,7 +22,7 @@ def parse_arguments():
                         help='random seed (default: 12345)')
     parser.add_argument('--save-interval', type=int, default=100,
                         help='save interval, one save per n updates (default: 100)')
-    parser.add_argument('--save-dir', default='./trained_models/',
+    parser.add_argument('--save-dir', default='./trained_models',
                         help='directory to save agent logs (default: ./trained_models/)')
     parser.add_argument('--model-config-path', dest='model_config_path',
                         type=str, default='LunarLander-v2-config.json',
@@ -39,6 +39,10 @@ def parse_arguments():
                         help='render environment')
     parser.add_argument('--update-freq', type=int, default=1,
                         help='how frequently to update network (default: 1)')
+    parser.add_argument('--continue-training', action='store_true', default=False,
+                        help='continue training from another model')
+    parser.add_argument('--load-dir', default='./trained_models/',
+                        help='path to trained model file, if available')
     return parser.parse_args()
 
 
@@ -53,6 +57,12 @@ def main(args):
         torch.cuda.manual_seed_all(args.seed)
     writer = SummaryWriter(log_dir=args.save_dir)
     actor = ActorNetwork(env.observation_space.shape[0],env.action_space.n)
+    if args.continue_training:
+        try:
+            actorState = torch.load(args.load_dir,map_location = lambda storage, loc: storage)
+            actor.load_state_dict(actorState)
+        except:
+            assert False, "Unable to find a model to load"
     if args.cuda:
         actor.cuda()
     optimizer = optim.Adam(actor.parameters(),lr=args.lr)
@@ -104,7 +114,7 @@ def main(args):
         if ep%args.update_freq==0:
             optimizer.zero_grad()
             l = torch.cat(lossarr).mean()
-            loss.backward()
+            l.backward()
             torch.nn.utils.clip_grad_norm(actor.parameters(),3)
             optimizer.step()
             r  =  np.array(rewardarr).sum()/args.update_freq
@@ -117,20 +127,19 @@ def main(args):
 
 
         if ep%500==0:
-            torch.save(actor.state_dict(),args.save_dir+args.env_name+'_'+str(ep)+'.pt')
+            torch.save(actor.state_dict(),args.save_dir+'/'+args.env_name+'.pt')
             rm,rs,em = test(env,actor,False)
-            #pdb.set_trace()
             writer.add_scalar('test/reward_mean',rm,ep)
             writer.add_scalar('test/reward_std',rs,ep)
             writer.add_scalar('test/ep_len_mean',em,ep)
-            writer.export_scalars_to_json(args.save_dir+args.env_name+'_scalars.json')
+            writer.export_scalars_to_json(args.save_dir+'/'+args.env_name+'_scalars.json')
 
         writer.add_scalar('train/reward',r,ep)
 
 def test(env,actor,render):
     rew_arr = []
     ep_len_arr = []
-    for ep in range(100):
+    for ep in range(10):
         ep_len = 0
         obs = env.reset()
         ep_reward = 0
