@@ -43,7 +43,7 @@ def parse_arguments():
                         help='continue training from another model')
     parser.add_argument('--load-dir', default='./trained_models/',
                         help='path to trained model file, if available')
-    parser.add_argument('--nstep', type=int, default=5,
+    parser.add_argument('--nsteps', type=int, default=5,
                         help='a2c steps')
     parser.add_argument('--value-loss-coeff', type=float, default=0.5,
                         help='value loss coefficient')
@@ -70,7 +70,7 @@ def main(args):
     if args.cuda:
         actor.cuda()
     optimizer = optim.Adam(actor.parameters(),lr=args.lr)
-    N = args.nstep
+    N = args.nsteps
     eps = 1.0
     obsarr = []
     rewardarr = []
@@ -81,8 +81,6 @@ def main(args):
     for ep in range(args.num_episodes):
         done = False
         obs =  env.reset()
-        if eps>0.1: # linearly decaying greedy parameter epsilon
-            eps = 1.0 - 0.0009*ep
         
         while not done:
             ep_len += 1
@@ -122,12 +120,11 @@ def main(args):
                 G[t] += pow(args.gamma,k)*rewardarr[t+k]
 
         Gtensor = Variable(torch.FloatTensor(G))
-
-        adv = 0.01*Gtensor - valvar
+        adv = 0.01*Gtensor - valvar.detach()
         action_loss = -(adv*logprobvar).mean()
-        value_loss = -adv.pow(2).mean()
+        value_loss = (0.01*Gtensor-valvar).pow(2).mean()
+        #pdb.set_trace()
         loss = action_loss + args.value_loss_coeff*value_loss
-        #pdb.set_trace() 
         lossarr.append(loss)
 
         if ep%args.update_freq==0:
