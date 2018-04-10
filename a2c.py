@@ -9,7 +9,7 @@ import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from networks import ActorCriticNetwork
+from networks import ActorNetwork,CriticNetwork
 import pdb
 from tensorboardX import SummaryWriter
 
@@ -60,7 +60,8 @@ def main(args):
     if args.cuda:
         torch.cuda.manual_seed_all(args.seed)
     writer = SummaryWriter(log_dir=args.save_dir)
-    actor = ActorCriticNetwork(env.observation_space.shape[0],env.action_space.n)
+    actor = ActorNetwork(env.observation_space.shape[0],env.action_space.n)
+    critic = CriticNetwork(env.observation_space.shape[0])
     if args.continue_training:
         try:
             actorState = torch.load(args.load_dir,map_location = lambda storage, loc: storage)
@@ -69,12 +70,14 @@ def main(args):
             assert False, "Unable to find a model to load"
     if args.cuda:
         actor.cuda()
-    optimizer = optim.Adam(actor.parameters(),lr=args.lr)
+        critic.cuda()
+    actor_optimizer = optim.Adam(actor.parameters(),lr=args.lr)
+    critic_optimizer = optim.Adam(critic.parameters(),lr=args.lr)
     N = args.nsteps
     eps = 1.0
     obsarr = []
     rewardarr = []
-    lossarr = []
+    actionlossarr = []
     actionarr = []
     valuearr = []
     ep_len = 0
@@ -85,7 +88,8 @@ def main(args):
         while not done:
             ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float(),volatile=True)
-            value,action = actor.get_action(obs_var)
+            action = actor.get_action(obs_var)
+            value = critic(obs_var)
             #if np.random.random()<eps:
             #    action = env.action_space.sample()
             #else:
@@ -106,7 +110,8 @@ def main(args):
 
         batch_obs = Variable(torch.from_numpy(np.stack(obsarr)).float())
         batch_act = Variable(torch.from_numpy(np.array(actionarr)))
-        valvar,logprobvar = actor.evaluate_actions(batch_obs,batch_act)
+        logprobvar = actor.evaluate_actions(batch_obs,batch_act)
+        valvar = critic(batch_obs)
         logprobvar = logprobvar.squeeze(1)
         valvar = valvar.squeeze(1)
 
@@ -124,20 +129,25 @@ def main(args):
         action_loss = -(adv*logprobvar).mean()
         value_loss = (0.01*Gtensor-valvar).pow(2).mean()
         #pdb.set_trace()
-        loss = action_loss + args.value_loss_coeff*value_loss
-        lossarr.append(loss)
+        #loss = action_loss + args.value_loss_coeff*value_loss
+        actionlossarr.append(action_loss)
+
+        critic_optimizer.zero_grad()
+        value_loss.backward()
+        torch.nn.utils.clip_grad_norm(critic.parameters(),3)
+        critic_optimizer.step()
 
         if ep%args.update_freq==0:
-            optimizer.zero_grad()
-            l = torch.cat(lossarr).mean()
+            actor_optimizer.zero_grad()
+            l = torch.cat(actionlossarr).mean()
             l.backward()
             torch.nn.utils.clip_grad_norm(actor.parameters(),3)
-            optimizer.step()
+            actor_optimizer.step()
             r  =  np.array(rewardarr).sum()/args.update_freq
             print("Episode: {} | Reward: {:.3f}| Length: {}".format(ep,r,ep_len/args.update_freq))
             obsarr = []
             rewardarr = []
-            lossarr = []
+            actionlossarr = []
             actionarr = []
             ep_len = 0
 
@@ -163,7 +173,7 @@ def test(env,actor,render):
         while not done:
             ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float())
-            _,action = actor.get_action(obs_var)
+            action = actor.get_action(obs_var)
             #if np.random.random()<eps:
             #    action = env.action_space.sample()
             #else:
