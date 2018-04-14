@@ -8,6 +8,8 @@ from keras.utils.np_utils import to_categorical
 from tqdm import tqdm
 import pdb
 
+
+
 class Imitation():
     def __init__(self, args, model_config_path, expert_weights_path):
         # Load the expert model.
@@ -133,9 +135,27 @@ class Imitation():
 
         loss = scores[0]
         acc = scores[1]*100
-
+        self.model.save_weights("imitater_" + str(num_episodes)+".h5")
 
         return loss, acc
+
+    def test(self, env,  num_of_episodes = 100):   
+        trained_weights_path = "imitater_" + str(self.args.episodes)+".h5"
+        tot_rewards = []
+        self.model.load_weights(trained_weights_path)
+        for i in range(num_of_episodes):
+            _, _, rewards = self.run_model(env) 
+            tot_rewards.append(np.sum(rewards))
+
+        return np.mean(tot_rewards), np.std(tot_rewards)
+
+    def test_expert(self, env,  num_of_episodes = 100):   
+        tot_rewards = []
+        for i in range(num_of_episodes):
+            _, _, rewards = self.run_expert(env) 
+            tot_rewards.append(np.sum(rewards))
+
+        return np.mean(tot_rewards), np.std(tot_rewards)
 
 
 def parse_arguments():
@@ -157,15 +177,15 @@ def parse_arguments():
                               action='store_false',
                               help="Whether to render the environment.")
     parser.set_defaults(render=False)
-    '''
-    parser_group.add_argument('--cuda', dest='cuda',
+    
+    parser_group.add_argument('--test', dest='test',
                               action='store_true',
-                              help="Whether to use gpu")
-    parser_group.add_argument('--no-cuda', dest='render',
+                              help="Whether to run in test mode")
+    parser_group.add_argument('--train', dest='test',
                               action='store_false',
-                              help="Whether to use cpu")
-    parser.set_defaults(cuda=False)
-    '''
+                              help="Whether to run in train mode")
+    parser.set_defaults(test=False)
+    
     parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
                     help='learning rate')
     parser.add_argument('--episodes', type=int, default=100, metavar='N',
@@ -191,12 +211,19 @@ def main(args):
     
     #Create Instance of imitation class
     imitater = Imitation(args, args.model_config_path, args.expert_weights_path)
-    loss, acc = imitater.train(env, args.episodes, args.epochs, args.render)
-    print("The imitater model has been trained")
-    print("Accuracy is: "+str(acc) + " and Average Train loss is: "+str(loss))
-    # TODO: Train cloned models using imitation learning, and record their
-    #       performance.
+    if not args.test:
+        loss, acc = imitater.train(env, args.episodes, args.epochs, args.render)
+        #imitater.save_weights("imitater_" + str(args.episodes)+".h5")
+        print("The imitater model has been trained")
+        print("Accuracy is: "+str(acc) + " and Average Train loss is: "+str(loss))
+        # TODO: Train cloned models using imitation learning, and record their
+        #       performance.
 
+    else:
+        mean, std = imitater.test(env)
+        print("Number of training episodes: " +str(args.episodes) + " \nMean reward is: " + str(mean) + " and Std of rewards is: "+str(std)) 
+        #mean, std = imitater.test_expert(env)
+        #print("Testing Expert Model: Mean reward is: " + str(mean) + " and Std of rewards is: "+str(std))
 
 if __name__ == '__main__':
   main(sys.argv)
