@@ -45,22 +45,26 @@ class ActorNetwork(nn.Module):
 class CriticNetwork(nn.Module):
   def __init__(self,obs_dim):
     super().__init__()
-    self.fc1 = nn.Linear(obs_dim,128)
-    self.fc2 = nn.Linear(128,64)
+    self.fc1 = nn.Linear(obs_dim,100)
+    self.fc2 = nn.Linear(100,256)
+    self.fc3 = nn.Linear(256,64)
     self.value = nn.Linear(64,1)
 
     self.fc1.bias.data.fill_(0)
     self.fc2.bias.data.fill_(0)
+    self.fc3.bias.data.fill_(0)
     self.value.bias.data.fill_(0)
 
     gain = nn.init.calculate_gain('relu')
     nn.init.xavier_uniform(self.fc1.weight,gain=gain)
     nn.init.xavier_uniform(self.fc2.weight,gain=gain)
+    nn.init.xavier_uniform(self.fc3.weight,gain=gain)
     nn.init.xavier_uniform(self.value.weight,gain=gain)
 
   def forward(self,obs):
     x = F.relu(self.fc1(obs))
     x = F.relu(self.fc2(x))
+    x = F.relu(self.fc3(x))
     x = self.value(x)
     return x
 """
