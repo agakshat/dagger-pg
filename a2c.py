@@ -59,6 +59,7 @@ def main(args):
     torch.manual_seed(args.seed)
     if args.cuda:
         torch.cuda.manual_seed_all(args.seed)
+    torch.set_num_threads(1)
     writer = SummaryWriter(log_dir=args.save_dir)
     actor = ActorNetwork(env.observation_space.shape[0],env.action_space.n)
     critic = CriticNetwork(env.observation_space.shape[0])
@@ -165,7 +166,7 @@ def main(args):
 def test(env,actor,render):
     rew_arr = []
     ep_len_arr = []
-    for ep in range(10):
+    for ep in range(100):
         ep_len = 0
         obs = env.reset()
         ep_reward = 0
