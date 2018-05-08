@@ -2,7 +2,7 @@
 sftp-config.json
 trained_models/
 tr2/
-
+vasu_results/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
