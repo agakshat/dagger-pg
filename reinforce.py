@@ -83,11 +83,6 @@ def main(args):
             ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float(),volatile=True)
             action = actor.get_action(obs_var)
-            #if np.random.random()<eps:
-            #    action = env.action_space.sample()
-            #else:
-            #    _,action = torch.max(action_probs,-1)
-            #    action = action.data[0]
             action = action.data[0]
             next_obs,reward,done,_ = env.step(action)
             if args.render:
@@ -148,11 +143,6 @@ def test(env,actor,render):
             ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float())
             action = actor.get_action(obs_var)
-            #if np.random.random()<eps:
-            #    action = env.action_space.sample()
-            #else:
-            #    _,action = torch.max(action_probs,-1)
-            #    action = action.data[0]
             action = action.data[0]
             next_obs,reward,done,_ = env.step(action)
             if render:
