@@ -24,9 +24,6 @@ def parse_arguments():
                         help='save interval, one save per n updates (default: 100)')
     parser.add_argument('--save-dir', default='./trained_models',
                         help='directory to save agent logs (default: ./trained_models/)')
-    parser.add_argument('--model-config-path', dest='model_config_path',
-                        type=str, default='LunarLander-v2-config.json',
-                        help="Path to the model config file.")
     parser.add_argument('--num-episodes', dest='num_episodes', type=int,
                         default=50000, help="Number of episodes to train on.")
     parser.add_argument('--lr', dest='lr', type=float,
@@ -45,8 +42,6 @@ def parse_arguments():
                         help='path to trained model file, if available')
     parser.add_argument('--nsteps', type=int, default=5,
                         help='a2c steps')
-    parser.add_argument('--value-loss-coeff', type=float, default=0.5,
-                        help='value loss coefficient')
     return parser.parse_args()
 
 
@@ -91,11 +86,6 @@ def main(args):
             obs_var = Variable(torch.from_numpy(obs).float(),volatile=True)
             action = actor.get_action(obs_var)
             value = critic(obs_var)
-            #if np.random.random()<eps:
-            #    action = env.action_space.sample()
-            #else:
-            #    _,action = torch.max(action_probs,-1)
-            #    action = action.data[0]
             action = action.data[0]
             next_obs,reward,done,_ = env.step(action)
             if args.render:
@@ -129,8 +119,6 @@ def main(args):
         adv = 0.01*Gtensor - valvar.detach()
         action_loss = -(adv*logprobvar).mean()
         value_loss = (0.01*Gtensor-valvar).pow(2).mean()
-        #pdb.set_trace()
-        #loss = action_loss + args.value_loss_coeff*value_loss
         actionlossarr.append(action_loss)
 
         critic_optimizer.zero_grad()
@@ -175,11 +163,6 @@ def test(env,actor,render):
             ep_len += 1
             obs_var = Variable(torch.from_numpy(obs).float())
             action = actor.get_action(obs_var)
-            #if np.random.random()<eps:
-            #    action = env.action_space.sample()
-            #else:
-            #    _,action = torch.max(action_probs,-1)
-            #    action = action.data[0]
             action = action.data[0]
             next_obs,reward,done,_ = env.step(action)
             if render:

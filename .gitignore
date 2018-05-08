@@ -1,3 +1,4 @@
+*.tar.gz
 sftp-config.json
 trained_models/
 tr2/
